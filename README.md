@@ -31,18 +31,32 @@ take a moment while it JIT-compiles.
 # Analyze a single track: BPM, key, Camelot code, structure.
 songfuse analyze track.mp3
 
-# Render a fused WAV (default: 16-bar EQ/bass-swap crossfade, key-matched).
-songfuse fuse song_a.mp3 song_b.mp3 -o fused.wav
+# Render a fused WAV. Default output is "<A>__x__<B>.wav" in the CWD.
+songfuse fuse song_a.mp3 song_b.mp3
 
-# Other styles: linear | equal_power | eq | bass_swap
+# Pick a crossfade style: linear | equal_power | eq | bass_swap | stems
+songfuse fuse a.mp3 b.mp3 --style stems        # Demucs-powered bass swap (requires [stems])
 songfuse fuse a.mp3 b.mp3 --style equal_power --bars 8
+
+# Trim intros/outros that shouldn't be mixed.
+songfuse fuse a.mp3 b.mp3 --skip-tail-a 5 --skip-head-b 20
+
+# Plan-only dry run — no audio rendered.
+songfuse fuse a.mp3 b.mp3 --preview
 
 # Force a target BPM and skip key matching.
 songfuse fuse a.mp3 b.mp3 --target-bpm 124 --no-key-match
 
-# Splice a 4-second MusicGen bridge before the crossfade (requires [ai] extras).
-songfuse fuse a.mp3 b.mp3 --ai-bridge-seconds 4 \
+# Splice a 4-second MusicGen bridge between A and B (requires [ai] extras).
+songfuse fuse a.mp3 b.mp3 --ai-bridge-seconds 4 --ai-seed 42 \
     --ai-prompt "deep house to drum and bass, 16 bar breakdown with risers"
+
+# Chain-fuse an entire playlist or folder into one continuous mix.
+songfuse mix tracks/ -o set.wav --bars 16
+songfuse mix playlist.txt -o set.wav   # one path per line; '#' comments allowed
+
+# Discover available styles.
+songfuse styles
 ```
 
 ## HTTP API

@@ -74,23 +74,41 @@ class TrackAnalysis:
 def _detect_key(chroma: np.ndarray) -> tuple[int, str, float]:
     """Krumhansl correlation across 24 key templates."""
     mean_chroma = chroma.mean(axis=1)
+    if not np.isfinite(mean_chroma).all() or mean_chroma.sum() < 1e-6:
+        return 0, "major", 0.0  # undefined key for silent / degenerate input
     best_score = -np.inf
     best_pc, best_mode = 0, "major"
     for pc in range(12):
         for profile, mode in ((_KRUM_MAJOR, "major"), (_KRUM_MINOR, "minor")):
             rotated = np.roll(profile, pc)
-            score = float(np.corrcoef(mean_chroma, rotated)[0, 1])
+            with np.errstate(invalid="ignore"):
+                score = float(np.corrcoef(mean_chroma, rotated)[0, 1])
+            if not np.isfinite(score):
+                continue
             if score > best_score:
                 best_score = score
                 best_pc, best_mode = pc, mode
+    if not np.isfinite(best_score):
+        return 0, "major", 0.0
     return best_pc, best_mode, max(0.0, min(1.0, (best_score + 1) / 2))
 
 
-def _estimate_downbeats(beats: np.ndarray, bpm: float) -> np.ndarray:
-    """Approximate downbeats as every 4th beat. A dedicated model (madmom) does better."""
-    if beats.size == 0:
+def _estimate_downbeats(beats: np.ndarray, onset_env: np.ndarray | None = None,
+                        sr: int | None = None, hop: int | None = None) -> np.ndarray:
+    """Approximate downbeats as every 4th beat, choosing the phase (0..3) whose
+    beat positions have the highest mean onset strength. Falls back to phase=0."""
+    if beats.size < 4:
         return beats
-    return beats[::4]
+    if onset_env is None or sr is None or hop is None:
+        return beats[::4]
+    frames = np.clip((beats * sr / hop).astype(int), 0, onset_env.size - 1)
+    strengths = onset_env[frames]
+    best_phase, best_score = 0, -np.inf
+    for phase in range(4):
+        score = float(strengths[phase::4].mean()) if strengths[phase::4].size else 0.0
+        if score > best_score:
+            best_phase, best_score = phase, score
+    return beats[best_phase::4]
 
 
 def _segment(y: np.ndarray, sr: int, duration: float) -> list[Segment]:
@@ -122,26 +140,53 @@ def _segment(y: np.ndarray, sr: int, duration: float) -> list[Segment]:
     return segments
 
 
-def analyze(path: str | Path, sr: int = DEFAULT_SR) -> TrackAnalysis:
-    """Run the full annotation pipeline on a single track."""
+_ANALYSIS_CACHE: dict[tuple[str, int, int], "TrackAnalysis"] = {}
+
+
+def _cache_key(path: Path, sr: int) -> tuple[str, int, int]:
+    stat = path.stat()
+    return (str(path.resolve()), sr, stat.st_mtime_ns)
+
+
+def clear_cache() -> None:
+    _ANALYSIS_CACHE.clear()
+
+
+def analyze(path: str | Path, sr: int = DEFAULT_SR, *, use_cache: bool = True) -> TrackAnalysis:
+    """Run the full annotation pipeline on a single track. Results are memoized
+    by (resolved path, sample rate, mtime) — repeated calls are free."""
     import librosa
+
+    resolved = Path(path)
+    key = _cache_key(resolved, sr) if use_cache and resolved.exists() else None
+    if key is not None and key in _ANALYSIS_CACHE:
+        return _ANALYSIS_CACHE[key]
 
     audio, sr = load(path, sr=sr)
     mono = to_mono(audio)
+    if mono.size == 0:
+        raise ValueError(f"Empty audio file: {path}")
     duration = mono.size / sr
 
-    tempo, beat_frames = librosa.beat.beat_track(y=mono, sr=sr, start_bpm=120, units="frames")
-    beats = librosa.frames_to_time(beat_frames, sr=sr)
+    hop = 512
+    onset_env = librosa.onset.onset_strength(y=mono, sr=sr, hop_length=hop)
+    tempo, beat_frames = librosa.beat.beat_track(
+        onset_envelope=onset_env, sr=sr, hop_length=hop, start_bpm=120, units="frames"
+    )
+    beats = librosa.frames_to_time(beat_frames, sr=sr, hop_length=hop)
     bpm = float(np.atleast_1d(tempo)[0])
+    if not np.isfinite(bpm) or bpm <= 0:
+        # Degenerate: fall back to a neutral tempo so downstream math doesn't explode.
+        bpm = 120.0
 
     harmonic = librosa.effects.harmonic(mono)
     chroma = librosa.feature.chroma_cqt(y=harmonic, sr=sr, bins_per_octave=36)
     key_pc, key_mode, key_conf = _detect_key(chroma)
 
     segments = _segment(mono, sr, duration)
-    downbeats = _estimate_downbeats(beats, bpm)
+    downbeats = _estimate_downbeats(beats, onset_env=onset_env, sr=sr, hop=hop)
 
-    return TrackAnalysis(
+    result = TrackAnalysis(
         path=str(path),
         sr=sr,
         duration=duration,
@@ -153,3 +198,6 @@ def analyze(path: str | Path, sr: int = DEFAULT_SR) -> TrackAnalysis:
         key_confidence=key_conf,
         segments=segments,
     )
+    if key is not None:
+        _ANALYSIS_CACHE[key] = result
+    return result

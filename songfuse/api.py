@@ -52,11 +52,16 @@ async def fuse_endpoint(
     target_bpm: float | None = Form(None),
     match_key: bool = Form(True),
     lufs: float = Form(-14.0),
+    skip_head_a: float = Form(0.0),
+    skip_tail_a: float = Form(0.0),
+    skip_head_b: float = Form(0.0),
+    skip_tail_b: float = Form(0.0),
     ai_bridge_seconds: float = Form(0.0),
     ai_prompt: str | None = Form(None),
+    ai_seed: int | None = Form(None),
     return_json: bool = Form(False),
 ) -> StreamingResponse | JSONResponse:
-    """Upload two audio files; receive a fused WAV (or JSON plan + base64 omitted)."""
+    """Upload two audio files; receive a fused WAV (or the transition plan as JSON)."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         path_a = _save_upload(track_a, tmp_path)
@@ -70,9 +75,16 @@ async def fuse_endpoint(
                 tempo_strategy=tempo_strategy,
                 target_bpm=target_bpm,
                 lufs_target=lufs,
+                skip_head_a=skip_head_a,
+                skip_tail_a=skip_tail_a,
+                skip_head_b=skip_head_b,
+                skip_tail_b=skip_tail_b,
                 ai_bridge_seconds=ai_bridge_seconds,
                 ai_bridge_prompt=ai_prompt,
+                ai_bridge_seed=ai_seed,
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

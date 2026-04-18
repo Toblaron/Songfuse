@@ -89,3 +89,46 @@ def test_tempo_helpers():
     assert not tempo_variance_ok(90.0, 130.0)
     assert pick_target_bpm(120.0, 128.0, "b") == 128.0
     assert pick_target_bpm(120.0, 128.0, "avg") == 124.0
+
+
+def test_clamp_bars_fits_short_tracks():
+    """Regression: 16-bar crossfade @ 120 BPM = 32s, longer than a 10s clip."""
+    from songfuse.fuse import _clamp_bars
+
+    clamped = _clamp_bars(16, bpm=120.0, dur_a=10.0, dur_b=10.0)
+    assert clamped < 16
+    assert clamped >= 1
+    assert _clamp_bars(16, bpm=120.0, dur_a=60.0, dur_b=60.0) == 16
+
+
+def test_rewrap_analysis_bpm_direction():
+    """Regression for the inverted time-stretch rate: slowing a 128 BPM track to 120
+    BPM requires rate = 120/128 (< 1 lengthens), and the rewrapped BPM must equal 120."""
+    from songfuse.analysis import TrackAnalysis
+    from songfuse.fuse import _rewrap_analysis
+
+    src = TrackAnalysis(
+        path="x", sr=44100, duration=60.0, bpm=128.0,
+        beats=np.array([0.5, 1.0, 1.5], dtype=np.float32),
+        downbeats=np.array([0.5, 2.5], dtype=np.float32),
+        key_pc=0, key_mode="major", key_confidence=0.9, segments=[],
+    )
+    rate = 120.0 / 128.0  # librosa convention: rate<1 lengthens (slows down)
+    rewrapped = _rewrap_analysis(src, src.downbeats / rate, src.duration / rate, rate)
+    assert abs(rewrapped.bpm - 120.0) < 1e-6
+    # Beat times after slowing should be LONGER, not shorter.
+    assert rewrapped.beats[0] > src.beats[0]
+
+
+def test_sequence_with_bridge_length_is_correct():
+    from songfuse.fuse import _sequence_with_bridge
+
+    n = 44_100
+    tail = np.ones(n, dtype=np.float32)
+    bridge = np.ones(n // 2, dtype=np.float32) * 0.5
+    head = np.ones(n, dtype=np.float32)
+    glue = 4_410  # 0.1s
+    out = _sequence_with_bridge(tail, bridge, head, glue)
+    # Two crossfade seams each collapse `glue` samples of overlap.
+    assert out.shape[-1] == tail.size + bridge.size + head.size - 2 * glue
+    assert np.isfinite(out).all()

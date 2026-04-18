@@ -18,11 +18,13 @@ def generate_bridge(
     duration: float = 4.0,
     prompt: str | None = None,
     model_name: str = "facebook/musicgen-small",
+    seed: int | None = None,
 ) -> np.ndarray:
     """Generate a short musical bridge conditioned on the end of A.
 
     `tail_a` and `head_b` are used to build a text prompt describing the desired
-    style when none is given. Returns a (channels, samples) float32 array at `sr`.
+    style when none is given. `seed` makes the generation reproducible.
+    Returns a (channels, samples) float32 array at `sr`.
     """
     try:
         import torch  # noqa: F401
@@ -35,21 +37,24 @@ def generate_bridge(
     import torch  # type: ignore
     import torchaudio  # type: ignore
 
+    if seed is not None:
+        torch.manual_seed(int(seed))
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(int(seed))
+
     model = MusicGen.get_pretrained(model_name)
     model.set_generation_params(duration=duration)
 
     if prompt is None:
         prompt = "seamless DJ transition, same key and tempo, smooth crossfade bridge"
 
-    # Use tail_a as a melody/continuation prompt. audiocraft wants (batch, channels, samples).
     cond_audio = tail_a
     if cond_audio.ndim == 1:
         cond_audio = np.stack([cond_audio, cond_audio], axis=0)
     cond_tensor = torch.from_numpy(cond_audio).float().unsqueeze(0)
-    cond_sr = sr
 
     try:
-        wav = model.generate_continuation(cond_tensor, cond_sr, [prompt], progress=False)
+        wav = model.generate_continuation(cond_tensor, sr, [prompt], progress=False)
     except Exception:
         wav = model.generate([prompt], progress=False)
 
@@ -66,6 +71,5 @@ def generate_bridge(
     if wav.ndim == 1:
         wav = np.stack([wav, wav], axis=0)
 
-    # Head_b is reserved for future bidirectional inpainting conditioning.
-    _ = head_b
+    _ = head_b  # reserved for future bidirectional inpainting conditioning
     return wav

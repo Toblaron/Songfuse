@@ -21,14 +21,18 @@ def load(path: str | Path, sr: int = DEFAULT_SR, mono: bool = False) -> tuple[np
     return y.astype(np.float32, copy=False), int(file_sr)
 
 
-def save(path: str | Path, audio: np.ndarray, sr: int) -> None:
+def save(path: str | Path, audio: np.ndarray, sr: int, subtype: str = "PCM_16") -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     if audio.ndim == 1:
         data = audio
     elif audio.shape[0] <= 8 and audio.shape[0] < audio.shape[1]:
         data = audio.T
     else:
         data = audio
-    sf.write(str(path), data, sr, subtype="PCM_16")
+    # PCM targets require [-1, 1]; float subtypes can tolerate slight overs but it's safer to clip.
+    data = np.clip(data, -1.0, 1.0)
+    sf.write(str(path), data, sr, subtype=subtype)
 
 
 def to_mono(audio: np.ndarray) -> np.ndarray:
@@ -43,3 +47,15 @@ def ensure_stereo(audio: np.ndarray) -> np.ndarray:
     if audio.shape[0] == 1:
         return np.concatenate([audio, audio], axis=0)
     return audio
+
+
+def trim_silence(audio: np.ndarray, top_db: float = 40.0) -> np.ndarray:
+    """Strip leading/trailing silence. Uses librosa's energy-based trim."""
+    import librosa
+
+    if audio.size == 0:
+        return audio
+    mono = to_mono(audio)
+    _, interval = librosa.effects.trim(mono, top_db=top_db)
+    start, end = int(interval[0]), int(interval[1])
+    return audio[..., start:end] if end > start else audio
