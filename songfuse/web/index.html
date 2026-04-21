@@ -151,6 +151,26 @@
         <option value="false">no</option>
       </select>
     </div>
+    <div class="field">
+      <label>AI mode</label>
+      <select id="aimode">
+        <option value="bidirectional" selected>bidirectional (A + B)</option>
+        <option value="forward">forward (A only)</option>
+        <option value="backward">backward (B only)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>AI model</label>
+      <select id="aimodel">
+        <option value="facebook/musicgen-small">musicgen-small (fast)</option>
+        <option value="facebook/musicgen-medium" selected>musicgen-medium</option>
+        <option value="facebook/musicgen-large">musicgen-large (~8GB VRAM)</option>
+      </select>
+    </div>
+    <div class="field" style="grid-column: span 3;">
+      <label>AI prompt (optional)</label>
+      <input type="text" id="aiprompt" placeholder="e.g. deep house to dnb, 16-bar breakdown with risers">
+    </div>
   </div>
 
   <button id="fuse-btn" disabled>Fuse</button>
@@ -238,7 +258,13 @@ document.getElementById('fuse-btn').addEventListener('click', async () => {
   fd.append('lufs', document.getElementById('lufs').value);
   fd.append('match_key', document.getElementById('matchkey').value);
   const ai = parseFloat(document.getElementById('ai').value || '0');
-  if (ai > 0) fd.append('ai_bridge_seconds', ai);
+  if (ai > 0) {
+    fd.append('ai_bridge_seconds', ai);
+    fd.append('ai_mode', document.getElementById('aimode').value);
+    fd.append('ai_model', document.getElementById('aimodel').value);
+    const prompt = document.getElementById('aiprompt').value.trim();
+    if (prompt) fd.append('ai_prompt', prompt);
+  }
 
   try {
     barFill.style.width = '40%';

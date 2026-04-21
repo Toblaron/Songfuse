@@ -33,6 +33,8 @@ class FusePlan:
     switch_time_b: float
     crossfade_seconds: float
     ai_bridge_seconds: float = 0.0
+    ai_bridge_mode: str = "bidirectional"
+    ai_bridge_model: str = "facebook/musicgen-medium"
     skip_head_a: float = 0.0
     skip_tail_a: float = 0.0
     skip_head_b: float = 0.0
@@ -118,6 +120,8 @@ def fuse(
     ai_bridge_seconds: float = 0.0,
     ai_bridge_prompt: str | None = None,
     ai_bridge_seed: int | None = None,
+    ai_bridge_mode: str = "bidirectional",
+    ai_bridge_model: str = "facebook/musicgen-medium",
     sr: int = DEFAULT_SR,
 ) -> FuseResult:
     """Fuse two songs with a beat-matched, harmonically aware transition."""
@@ -216,19 +220,24 @@ def fuse(
 
     # Build the transition segment.
     if ai_bridge_seconds > 0:
-        from songfuse.ai_bridge import generate_bridge
+        from songfuse.ai_bridge import generate_transition
 
         bridge = ensure_stereo(
-            generate_bridge(
+            generate_transition(
                 tail_a, head_b, sr,
                 duration=ai_bridge_seconds,
+                mode=ai_bridge_mode,
+                model_name=ai_bridge_model,
                 prompt=ai_bridge_prompt,
                 seed=ai_bridge_seed,
             )
         )
         glue = int(min(0.5 * sr, tail_a.shape[-1] // 2, bridge.shape[-1] // 2, head_b.shape[-1] // 2))
         transition_audio = _sequence_with_bridge(tail_a, bridge, head_b, glue)
-        notes.append(f"Inserted {ai_bridge_seconds:.2f}s MusicGen bridge.")
+        notes.append(
+            f"Inserted {ai_bridge_seconds:.2f}s {ai_bridge_mode} MusicGen bridge "
+            f"({ai_bridge_model.split('/')[-1]})."
+        )
     elif style == "stems":
         from songfuse.stems import bass_swap_via_stems
 
@@ -253,6 +262,8 @@ def fuse(
         switch_time_b=round(switch_b, 3),
         crossfade_seconds=round(crossfade_seconds, 3),
         ai_bridge_seconds=float(ai_bridge_seconds),
+        ai_bridge_mode=ai_bridge_mode,
+        ai_bridge_model=ai_bridge_model,
         skip_head_a=float(skip_head_a),
         skip_tail_a=float(skip_tail_a),
         skip_head_b=float(skip_head_b),

@@ -37,6 +37,18 @@ class TempoStrategy(str, Enum):
     avg = "avg"
 
 
+class AiMode(str, Enum):
+    bidirectional = "bidirectional"
+    forward = "forward"
+    backward = "backward"
+
+
+class AiModel(str, Enum):
+    small = "facebook/musicgen-small"
+    medium = "facebook/musicgen-medium"
+    large = "facebook/musicgen-large"
+
+
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"songfuse {__version__}")
@@ -134,6 +146,15 @@ def fuse_cmd(
         0.0, "--ai-bridge-seconds",
         help="If >0, insert a MusicGen-generated bridge of this length. Requires [ai] extras.",
     ),
+    ai_mode: AiMode = typer.Option(
+        AiMode.bidirectional, "--ai-mode",
+        help="bidirectional = condition on A's outro AND B's intro (recommended). "
+             "forward = A only; backward = B only.",
+    ),
+    ai_model: AiModel = typer.Option(
+        AiModel.medium, "--ai-model",
+        help="MusicGen checkpoint. 'large' sounds best but needs ~8GB VRAM.",
+    ),
     ai_prompt: Optional[str] = typer.Option(None, "--ai-prompt",
                                             help="Optional text prompt for the AI bridge."),
     ai_seed: Optional[int] = typer.Option(None, "--ai-seed",
@@ -176,6 +197,8 @@ def fuse_cmd(
                 ai_bridge_seconds=ai_bridge_seconds,
                 ai_bridge_prompt=ai_prompt,
                 ai_bridge_seed=ai_seed,
+                ai_bridge_mode=ai_mode.value,
+                ai_bridge_model=ai_model.value,
             )
 
     result = _friendly_run(work)

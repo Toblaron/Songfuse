@@ -47,8 +47,11 @@ songfuse fuse a.mp3 b.mp3 --preview
 # Force a target BPM and skip key matching.
 songfuse fuse a.mp3 b.mp3 --target-bpm 124 --no-key-match
 
-# Splice a 4-second MusicGen bridge between A and B (requires [ai] extras).
-songfuse fuse a.mp3 b.mp3 --ai-bridge-seconds 4 --ai-seed 42 \
+# Generate an 8-second AI-composed transition with bidirectional MusicGen inpainting
+# (forward-conditioned on A's outro + reverse-conditioned on B's intro, then cross-fused).
+# Requires [ai] extras. Use --ai-model large on ~8GB+ VRAM; 'small' for CPU fallback.
+songfuse fuse a.mp3 b.mp3 --ai-bridge-seconds 8 --ai-seed 42 \
+    --ai-mode bidirectional --ai-model facebook/musicgen-medium \
     --ai-prompt "deep house to drum and bass, 16 bar breakdown with risers"
 
 # Chain-fuse an entire playlist or folder into one continuous mix.
@@ -77,9 +80,9 @@ Endpoints:
 - `POST /analyze` — multipart upload `file` → JSON with BPM / key / segments.
 - `POST /fuse` — multipart upload `track_a`, `track_b`, plus optional form
   fields (`style`, `bars`, `tempo_strategy`, `target_bpm`, `match_key`,
-  `lufs`, `ai_bridge_seconds`, `ai_prompt`, `return_json`).
-  Returns a WAV stream; set `return_json=true` to receive the transition plan
-  instead.
+  `lufs`, `ai_bridge_seconds`, `ai_mode`, `ai_model`, `ai_prompt`, `ai_seed`,
+  `return_json`). Returns a WAV stream; set `return_json=true` to receive the
+  transition plan instead.
 
 Example:
 
@@ -148,7 +151,9 @@ automatically if `librosa` is not installed.
   genre-aware switch points.
 - Downbeat tracking is every-fourth-beat heuristic; madmom's
   `DBNBeatTrackingProcessor` is a drop-in upgrade.
-- MusicGen bridge uses continuation; swap to a discrete-diffusion inpainting
-  model for bidirectional conditioning on both A's outro and B's intro.
+- MusicGen bridge fakes bidirectional conditioning by forward-continuing A's
+  outro and reverse-continuing B's intro (flip → generate → flip), then
+  crossfading the two halves. A true discrete-diffusion inpainter (DAC/Encodec
+  tokens) conditioned on both boundaries would produce a more coherent middle.
 - True-peak limiter is a simple peak normalizer; replace with an ISP limiter
   (e.g. `pyloudnorm`'s true-peak meter + soft clipper) for broadcast-safe output.

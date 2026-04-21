@@ -64,6 +64,8 @@ async def fuse_endpoint(
     skip_head_b: float = Form(0.0),
     skip_tail_b: float = Form(0.0),
     ai_bridge_seconds: float = Form(0.0),
+    ai_mode: str = Form("bidirectional"),
+    ai_model: str = Form("facebook/musicgen-medium"),
     ai_prompt: str | None = Form(None),
     ai_seed: int | None = Form(None),
     return_json: bool = Form(False),
@@ -89,6 +91,8 @@ async def fuse_endpoint(
                 ai_bridge_seconds=ai_bridge_seconds,
                 ai_bridge_prompt=ai_prompt,
                 ai_bridge_seed=ai_seed,
+                ai_bridge_mode=ai_mode,
+                ai_bridge_model=ai_model,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
