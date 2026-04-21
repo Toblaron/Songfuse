@@ -59,13 +59,20 @@ songfuse mix playlist.txt -o set.wav   # one path per line; '#' comments allowed
 songfuse styles
 ```
 
-## HTTP API
+## Web UI + HTTP API
 
 ```bash
 songfuse serve --port 8000
 ```
 
+Open **http://localhost:8000** for the drag-drop web UI: drop two audio files,
+pick a style / bars / tempo target, click *Fuse*, play or download the result.
+Both tracks get analyzed on upload so you see BPM, key, and Camelot code before
+committing to the transition.
+
 Endpoints:
+
+- `GET /` — the web UI (static HTML + JS, no build step).
 
 - `POST /analyze` — multipart upload `file` → JSON with BPM / key / segments.
 - `POST /fuse` — multipart upload `track_a`, `track_b`, plus optional form

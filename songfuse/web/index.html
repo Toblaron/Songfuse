@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songfuse</title>
+<style>
+  :root {
+    --bg: #0c0d10;
+    --panel: #16181c;
+    --panel-2: #1c1f25;
+    --border: #272a31;
+    --text: #e6e7ea;
+    --muted: #8b9099;
+    --accent: #7cf3a0;
+    --accent-2: #4cc2ff;
+    --danger: #ff7a7a;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 16px 64px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; justify-content: center;
+  }
+  main { width: 100%; max-width: 860px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .tag { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .tag a { color: var(--accent-2); text-decoration: none; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .drop {
+    background: var(--panel); border: 1.5px dashed var(--border); border-radius: 12px;
+    padding: 22px; cursor: pointer; transition: border-color .15s, background .15s;
+    min-height: 120px; display: flex; flex-direction: column; justify-content: center;
+  }
+  .drop:hover, .drop.dragover { border-color: var(--accent); background: var(--panel-2); }
+  .drop .label { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .drop .hint { color: var(--muted); font-size: 13px; }
+  .drop .filename { color: var(--accent); font-family: var(--mono); font-size: 13px; margin-top: 6px; word-break: break-all; }
+  .drop input { display: none; }
+  .info {
+    margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--muted);
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  }
+  .info .k { color: var(--muted); }
+  .info .v { color: var(--text); }
+  .controls {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; margin-top: 18px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .field select, .field input {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 10px; font-size: 14px; font-family: inherit;
+  }
+  .field select:focus, .field input:focus { outline: 1px solid var(--accent); }
+  button {
+    background: var(--accent); color: #07120b; border: 0;
+    padding: 14px 20px; border-radius: 10px; font-weight: 700;
+    font-size: 15px; cursor: pointer; width: 100%; margin-top: 18px;
+    transition: filter .15s, transform .05s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { background: var(--panel-2); color: var(--muted); cursor: not-allowed; }
+  .result {
+    margin-top: 24px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px; display: none;
+  }
+  .result.show { display: block; }
+  .result h2 { margin: 0 0 14px; font-size: 18px; }
+  audio { width: 100%; margin: 4px 0 16px; }
+  .plan {
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .err { color: var(--danger); margin-top: 12px; font-size: 14px; }
+  .note { color: #ffd27a; font-size: 13px; margin-top: 6px; }
+  .bar {
+    height: 4px; background: var(--panel-2); border-radius: 4px; overflow: hidden;
+    margin-top: 16px; display: none;
+  }
+  .bar.show { display: block; }
+  .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    transition: width .3s; }
+  .inline { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Songfuse</h1>
+  <div class="tag">AI-assisted seamless transitions between two songs. Drop two audio files and fuse.</div>
+
+  <div class="grid-2">
+    <div class="drop" id="drop-a" data-slot="a">
+      <div class="label">Track A (outgoing)</div>
+      <div class="hint">Click or drop an audio file.</div>
+      <div class="filename" id="name-a"></div>
+      <div class="info" id="info-a"></div>
+      <input type="file" accept="audio/*" id="file-a">
+    </div>
+    <div class="drop" id="drop-b" data-slot="b">
+      <div class="label">Track B (incoming)</div>
+      <div class="hint">Click or drop an audio file.</div>
+      <div class="filename" id="name-b"></div>
+      <div class="info" id="info-b"></div>
+      <input type="file" accept="audio/*" id="file-b">
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="field">
+      <label>Style</label>
+      <select id="style">
+        <option value="eq" selected>eq (bass-swap)</option>
+        <option value="equal_power">equal_power</option>
+        <option value="linear">linear</option>
+        <option value="bass_swap">bass_swap</option>
+        <option value="stems">stems (requires [stems] extras)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Bars</label>
+      <input type="number" id="bars" min="1" max="64" value="16">
+    </div>
+    <div class="field">
+      <label>Tempo strategy</label>
+      <select id="tempo">
+        <option value="b" selected>match B</option>
+        <option value="a">match A</option>
+        <option value="avg">average</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Target LUFS</label>
+      <input type="number" id="lufs" value="-14" step="0.5">
+    </div>
+    <div class="field">
+      <label>AI bridge (s)</label>
+      <input type="number" id="ai" value="0" min="0" step="0.5">
+    </div>
+    <div class="field">
+      <label>Key match</label>
+      <select id="matchkey">
+        <option value="true" selected>yes</option>
+        <option value="false">no</option>
+      </select>
+    </div>
+  </div>
+
+  <button id="fuse-btn" disabled>Fuse</button>
+  <div class="bar" id="progress"><div></div></div>
+  <div class="err" id="err"></div>
+
+  <div class="result" id="result">
+    <h2>Fused mix</h2>
+    <audio id="player" controls></audio>
+    <div class="inline"><a id="dl" class="inline" download="fused.wav">↓ download</a></div>
+    <h2 style="margin-top: 18px;">Transition plan</h2>
+    <div class="plan" id="plan"></div>
+  </div>
+</main>
+
+<script>
+const state = { a: null, b: null };
+
+function setupDrop(slot) {
+  const zone = document.getElementById(`drop-${slot}`);
+  const input = document.getElementById(`file-${slot}`);
+  const nameEl = document.getElementById(`name-${slot}`);
+  const infoEl = document.getElementById(`info-${slot}`);
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) acceptFile(slot, e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) acceptFile(slot, input.files[0]);
+  });
+
+  async function acceptFile(slot, file) {
+    state[slot] = file;
+    nameEl.textContent = file.name;
+    infoEl.innerHTML = `<span class="k">size</span><span class="v">${(file.size/1e6).toFixed(1)} MB</span>
+                       <span class="k">status</span><span class="v">analyzing…</span>`;
+    updateButton();
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch('/analyze', { method: 'POST', body: fd });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      infoEl.innerHTML = `
+        <span class="k">duration</span><span class="v">${d.duration}s</span>
+        <span class="k">bpm</span><span class="v">${d.bpm}</span>
+        <span class="k">key</span><span class="v">${d.key} (${d.camelot})</span>
+        <span class="k">confidence</span><span class="v">${d.key_confidence}</span>`;
+    } catch (e) {
+      infoEl.innerHTML = `<span class="k">error</span><span class="v">${e.message}</span>`;
+    }
+  }
+}
+
+function updateButton() {
+  const btn = document.getElementById('fuse-btn');
+  btn.disabled = !(state.a && state.b);
+}
+
+setupDrop('a');
+setupDrop('b');
+
+document.getElementById('fuse-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('fuse-btn');
+  const errEl = document.getElementById('err');
+  const barEl = document.getElementById('progress');
+  const barFill = barEl.firstElementChild;
+  const resultEl = document.getElementById('result');
+  errEl.textContent = '';
+  resultEl.classList.remove('show');
+  btn.disabled = true; btn.textContent = 'Fusing…';
+  barEl.classList.add('show'); barFill.style.width = '15%';
+
+  const fd = new FormData();
+  fd.append('track_a', state.a);
+  fd.append('track_b', state.b);
+  fd.append('style', document.getElementById('style').value);
+  fd.append('bars', document.getElementById('bars').value);
+  fd.append('tempo_strategy', document.getElementById('tempo').value);
+  fd.append('lufs', document.getElementById('lufs').value);
+  fd.append('match_key', document.getElementById('matchkey').value);
+  const ai = parseFloat(document.getElementById('ai').value || '0');
+  if (ai > 0) fd.append('ai_bridge_seconds', ai);
+
+  try {
+    barFill.style.width = '40%';
+    const r = await fetch('/fuse', { method: 'POST', body: fd });
+    barFill.style.width = '85%';
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`HTTP ${r.status}: ${txt.slice(0, 200)}`);
+    }
+    const planHeader = r.headers.get('X-Songfuse-Plan');
+    const blob = await r.blob();
+    barFill.style.width = '100%';
+
+    const url = URL.createObjectURL(blob);
+    const player = document.getElementById('player');
+    player.src = url;
+    document.getElementById('dl').href = url;
+    if (planHeader) {
+      try {
+        const plan = JSON.parse(planHeader);
+        document.getElementById('plan').textContent = JSON.stringify(plan, null, 2);
+      } catch { document.getElementById('plan').textContent = planHeader; }
+    }
+    resultEl.classList.add('show');
+    player.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    errEl.textContent = `Fuse failed — ${e.message}`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Fuse';
+    setTimeout(() => { barEl.classList.remove('show'); barFill.style.width = '0'; }, 500);
+  }
+});
+</script>
+</body>
+</html>

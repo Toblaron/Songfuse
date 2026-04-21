@@ -1,4 +1,4 @@
-"""FastAPI service exposing /analyze and /fuse."""
+"""FastAPI service: JSON API + a drag-drop web UI."""
 
 from __future__ import annotations
 
@@ -9,20 +9,27 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from songfuse import analyze, fuse
+from songfuse import __version__, analyze, fuse
+
+_WEB_DIR = Path(__file__).parent / "web"
 
 app = FastAPI(
     title="Songfuse",
-    version="0.1.0",
+    version=__version__,
     description="Generate a seamless transition between two audio tracks.",
 )
 
 
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(_WEB_DIR / "index.html", media_type="text/html")
+
+
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
 
 
 def _save_upload(upload: UploadFile, tmpdir: Path) -> Path:
@@ -42,7 +49,7 @@ async def analyze_endpoint(file: UploadFile = File(...)) -> JSONResponse:
         return JSONResponse(analyze(path).to_dict())
 
 
-@app.post("/fuse")
+@app.post("/fuse", response_model=None)
 async def fuse_endpoint(
     track_a: UploadFile = File(..., description="Outgoing track."),
     track_b: UploadFile = File(..., description="Incoming track."),
